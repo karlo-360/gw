@@ -7,12 +7,14 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
+
+	"github.com/joho/godotenv"
 )
 
 var templates = template.Must(template.ParseFiles("templates/view.html", "templates/edit.html"))
 
 var baseUrl = "http://api.weatherapi.com/v1/"
-var key = "f2793108608f427599132318251112"
 
 type Local struct {
 	Location Location `json:"location"`
@@ -31,7 +33,7 @@ type Current struct {
 	Cloud int8 `json:"cloud"`
 }
 
-func getLocal() (*Local, error){
+func getLocal(key string) (*Local, error){
 	client := &http.Client{}
 	
 	req, err := http.NewRequest("GET", baseUrl + "current.json?q=auto%3Aip", nil)
@@ -74,8 +76,8 @@ func renderTemplate(w http.ResponseWriter, tmpl string, c *Local) {
 	}
 }
 
-func localClimeHandler(w http.ResponseWriter, r *http.Request) {
-	local, err := getLocal()
+func localClimeHandler(w http.ResponseWriter, r *http.Request, key string) {
+	local, err := getLocal(key)
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -84,12 +86,25 @@ func localClimeHandler(w http.ResponseWriter, r *http.Request) {
 	renderTemplate(w, "view", local)
 }
 
+func makeHandler(fn func(http.ResponseWriter, *http.Request, string)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		key := os.Getenv("API_CLIME_KEY")
+
+		fn(w, r, key)
+	}
+}
 
 
 func main()  {
 	fmt.Println("Working just fine...")
 
-	http.HandleFunc("/view/local", localClimeHandler)
+	err := godotenv.Load()
+
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+
+	http.HandleFunc("/view/local", makeHandler(localClimeHandler))
 
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
